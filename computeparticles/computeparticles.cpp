@@ -25,12 +25,7 @@
 
 #define VERTEX_BUFFER_BIND_ID 0
 #define ENABLE_VALIDATION false
-#if defined(__ANDROID__)
-// Lower particle count on Android for performance reasons
-#define PARTICLE_COUNT 128 * 1024
-#else
 #define PARTICLE_COUNT 256 * 1024
-#endif
 
 class VulkanExample : public VulkanExampleBase
 {

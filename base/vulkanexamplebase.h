@@ -141,7 +141,7 @@ public:
 	uint32_t width = 1280;
 	uint32_t height = 720;
 
-	VkClearColorValue defaultClearColor = { { 0.025f, 0.025f, 0.025f, 1.0f } };
+	VkClearColorValue defaultClearColor;// = { { 0.025f, 0.025f, 0.025f, 1.0f } };
 
 	float zoom = 0;
 

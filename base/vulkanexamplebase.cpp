@@ -23,10 +23,6 @@ VkResult VulkanExampleBase::createInstance(bool enableValidation)
 	// Enable surface extensions depending on os
 #if defined(_WIN32)
 	enabledExtensions.push_back(VK_KHR_WIN32_SURFACE_EXTENSION_NAME);
-#elif defined(__ANDROID__)
-	enabledExtensions.push_back(VK_KHR_ANDROID_SURFACE_EXTENSION_NAME);
-#elif defined(_DIRECT2DISPLAY)
-	enabledExtensions.push_back(VK_KHR_DISPLAY_EXTENSION_NAME);
 #elif defined(__linux__)
 	enabledExtensions.push_back(VK_KHR_XCB_SURFACE_EXTENSION_NAME);
 #endif
@@ -66,11 +62,7 @@ std::string VulkanExampleBase::getWindowTitle()
 
 const std::string VulkanExampleBase::getAssetPath()
 {
-#if defined(__ANDROID__)
-	return "";
-#else
 	return "./../data/";
-#endif
 }
 
 bool VulkanExampleBase::checkCommandBuffers()
@@ -216,9 +208,6 @@ void VulkanExampleBase::prepare()
 	createSetupCommandBuffer();
 	// Create a simple texture loader class
 	textureLoader = new vkTools::VulkanTextureLoader(vulkanDevice, queue, cmdPool);
-#if defined(__ANDROID__)
-	textureLoader->assetManager = androidApp->activity->assetManager;
-#endif
 	if (enableTextOverlay)
 	{
 		// Load the text rendering shaders
@@ -244,11 +233,7 @@ VkPipelineShaderStageCreateInfo VulkanExampleBase::loadShader(std::string fileNa
 	VkPipelineShaderStageCreateInfo shaderStage = {};
 	shaderStage.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
 	shaderStage.stage = stage;
-#if defined(__ANDROID__)
-	shaderStage.module = vkTools::loadShader(androidApp->activity->assetManager, fileName.c_str(), device, stage);
-#else
 	shaderStage.module = vkTools::loadShader(fileName.c_str(), device, stage);
-#endif
 	shaderStage.pName = "main"; // todo : make param
 	assert(shaderStage.module != NULL);
 	shaderModules.push_back(shaderStage.module);
@@ -329,10 +314,6 @@ void VulkanExampleBase::loadMesh(std::string filename, vkMeshLoader::MeshBuffer 
 {
 	VulkanMeshLoader *mesh = new VulkanMeshLoader(vulkanDevice);
 
-#if defined(__ANDROID__)
-	mesh->assetManager = androidApp->activity->assetManager;
-#endif
-
 	mesh->LoadMesh(filename);
 	assert(mesh->m_Entries.size() > 0);
 
@@ -407,142 +388,6 @@ void VulkanExampleBase::renderLoop()
 				SetWindowText(window, windowTitle.c_str());
 			}
 			lastFPS = roundf(1.0f / frameTimer);
-			updateTextOverlay();
-			fpsTimer = 0.0f;
-			frameCounter = 0;
-		}
-	}
-#elif defined(__ANDROID__)
-	while (1)
-	{
-		int ident;
-		int events;
-		struct android_poll_source* source;
-		bool destroy = false;
-
-		focused = true;
-
-		while ((ident = ALooper_pollAll(focused ? 0 : -1, NULL, &events, (void**)&source)) >= 0)
-		{
-			if (source != NULL)
-			{
-				source->process(androidApp, source);
-			}
-			if (androidApp->destroyRequested != 0)
-			{
-				LOGD("Android app destroy requested");
-				destroy = true;
-				break;
-			}
-		}
-
-		// App destruction requested
-		// Exit loop, example will be destroyed in application main
-		if (destroy)
-		{
-			break;
-		}
-
-		// Render frame
-		if (prepared)
-		{
-			auto tStart = std::chrono::high_resolution_clock::now();
-			render();
-			frameCounter++;
-			auto tEnd = std::chrono::high_resolution_clock::now();
-			auto tDiff = std::chrono::duration<double, std::milli>(tEnd - tStart).count();
-			frameTimer = tDiff / 1000.0f;
-			camera.update(frameTimer);
-			// Convert to clamped timer value
-			if (!paused)
-			{
-				timer += timerSpeed * frameTimer;
-				if (timer > 1.0)
-				{
-					timer -= 1.0f;
-				}
-			}
-			fpsTimer += (float)tDiff;
-			if (fpsTimer > 1000.0f)
-			{
-				lastFPS = frameCounter;
-				updateTextOverlay();
-				fpsTimer = 0.0f;
-				frameCounter = 0;
-			}
-			// Check gamepad state
-			const float deadZone = 0.0015f;
-			// todo : check if gamepad is present
-			// todo : time based and relative axis positions
-			bool updateView = false;
-			if (camera.type != Camera::CameraType::firstperson)
-			{
-				// Rotate
-				if (std::abs(gamePadState.axisLeft.x) > deadZone)
-				{
-					rotation.y += gamePadState.axisLeft.x * 0.5f * rotationSpeed;
-					camera.rotate(glm::vec3(0.0f, gamePadState.axisLeft.x * 0.5f, 0.0f));
-					updateView = true;
-				}
-				if (std::abs(gamePadState.axisLeft.y) > deadZone)
-				{
-					rotation.x -= gamePadState.axisLeft.y * 0.5f * rotationSpeed;
-					camera.rotate(glm::vec3(gamePadState.axisLeft.y * 0.5f, 0.0f, 0.0f));
-					updateView = true;
-				}
-				// Zoom
-				if (std::abs(gamePadState.axisRight.y) > deadZone)
-				{
-					zoom -= gamePadState.axisRight.y * 0.01f * zoomSpeed;
-					updateView = true;
-				}
-				if (updateView)
-				{
-					viewChanged();
-				}
-			}
-			else
-			{
-				updateView = camera.updatePad(gamePadState.axisLeft, gamePadState.axisRight, frameTimer);
-				if (updateView)
-				{
-					viewChanged();
-				}
-			}
-		}
-	}
-#elif defined(_DIRECT2DISPLAY)
-	while (!quit)
-	{
-		auto tStart = std::chrono::high_resolution_clock::now();
-		if (viewUpdated)
-		{
-			viewUpdated = false;
-			viewChanged();
-		}
-		render();
-		frameCounter++;
-		auto tEnd = std::chrono::high_resolution_clock::now();
-		auto tDiff = std::chrono::duration<double, std::milli>(tEnd - tStart).count();
-		frameTimer = tDiff / 1000.0f;
-		camera.update(frameTimer);
-		if (camera.moving())
-		{
-			viewUpdated = true;
-		}
-		// Convert to clamped timer value
-		if (!paused)
-		{
-			timer += timerSpeed * frameTimer;
-			if (timer > 1.0)
-			{
-				timer -= 1.0f;
-			}
-		}
-		fpsTimer += (float)tDiff;
-		if (fpsTimer > 1000.0f)
-		{
-			lastFPS = frameCounter;
 			updateTextOverlay();
 			fpsTimer = 0.0f;
 			frameCounter = 0;
@@ -689,12 +534,6 @@ VulkanExampleBase::VulkanExampleBase(bool enableValidation, PFN_GetEnabledFeatur
 			enableVSync = true;
 		}
 	}
-#elif defined(__ANDROID__)
-	// Vulkan library is loaded dynamically on Android
-	bool libLoaded = loadVulkanLibrary();
-	assert(libLoaded);
-#elif defined(_DIRECT2DISPLAY)
-
 #elif defined(__linux__)
 	initxcbConnection();
 #endif
@@ -773,17 +612,6 @@ VulkanExampleBase::~VulkanExampleBase()
 	}
 
 	vkDestroyInstance(instance, nullptr);
-
-#if defined(_DIRECT2DISPLAY)
-
-#elif defined(__linux)
-#if defined(__ANDROID__)
-	// todo : android cleanup (if required)
-#else
-	xcb_destroy_window(connection, window);
-	xcb_disconnect(connection);
-#endif
-#endif
 }
 
 void VulkanExampleBase::initVulkan(bool enableValidation)
@@ -796,10 +624,6 @@ void VulkanExampleBase::initVulkan(bool enableValidation)
 	{
 		vkTools::exitFatal("Could not create Vulkan instance : \n" + vkTools::errorString(err), "Fatal error");
 	}
-
-#if defined(__ANDROID__)
-	loadVulkanFunctions(instance);
-#endif
 
 	// If requested, we enable the default validation layers for debugging
 	if (enableValidation)
@@ -1150,112 +974,7 @@ void VulkanExampleBase::handleMessages(HWND hWnd, UINT uMsg, WPARAM wParam, LPAR
 		break;
 	}
 }
-#elif defined(__ANDROID__)
-int32_t VulkanExampleBase::handleAppInput(struct android_app* app, AInputEvent* event)
-{
-	VulkanExampleBase* vulkanExample = reinterpret_cast<VulkanExampleBase*>(app->userData);
-	if (AInputEvent_getType(event) == AINPUT_EVENT_TYPE_MOTION)
-	{
-		if (AInputEvent_getSource(event) == AINPUT_SOURCE_JOYSTICK)
-		{
-			// Left thumbstick
-			vulkanExample->gamePadState.axisLeft.x = AMotionEvent_getAxisValue(event, AMOTION_EVENT_AXIS_X, 0);
-			vulkanExample->gamePadState.axisLeft.y = AMotionEvent_getAxisValue(event, AMOTION_EVENT_AXIS_Y, 0);
-			// Right thumbstick
-			vulkanExample->gamePadState.axisRight.x = AMotionEvent_getAxisValue(event, AMOTION_EVENT_AXIS_Z, 0);
-			vulkanExample->gamePadState.axisRight.y = AMotionEvent_getAxisValue(event, AMOTION_EVENT_AXIS_RZ, 0);
-		}
-		else
-		{
-			// todo : touch input
-		}
-		return 1;
-	}
 
-	if (AInputEvent_getType(event) == AINPUT_EVENT_TYPE_KEY)
-	{
-		int32_t keyCode = AKeyEvent_getKeyCode((const AInputEvent*)event);
-		int32_t action = AKeyEvent_getAction((const AInputEvent*)event);
-		int32_t button = 0;
-
-		if (action == AKEY_EVENT_ACTION_UP)
-			return 0;
-
-		switch (keyCode)
-		{
-		case AKEYCODE_BUTTON_A:
-			vulkanExample->keyPressed(GAMEPAD_BUTTON_A);
-			break;
-		case AKEYCODE_BUTTON_B:
-			vulkanExample->keyPressed(GAMEPAD_BUTTON_B);
-			break;
-		case AKEYCODE_BUTTON_X:
-			vulkanExample->keyPressed(GAMEPAD_BUTTON_X);
-			break;
-		case AKEYCODE_BUTTON_Y:
-			vulkanExample->keyPressed(GAMEPAD_BUTTON_Y);
-			break;
-		case AKEYCODE_BUTTON_L1:
-			vulkanExample->keyPressed(GAMEPAD_BUTTON_L1);
-			break;
-		case AKEYCODE_BUTTON_R1:
-			vulkanExample->keyPressed(GAMEPAD_BUTTON_R1);
-			break;
-		case AKEYCODE_BUTTON_START:
-			vulkanExample->paused = !vulkanExample->paused;
-			break;
-		};
-
-		LOGD("Button %d pressed", keyCode);
-	}
-
-	return 0;
-}
-
-void VulkanExampleBase::handleAppCommand(android_app * app, int32_t cmd)
-{
-	assert(app->userData != NULL);
-	VulkanExampleBase* vulkanExample = reinterpret_cast<VulkanExampleBase*>(app->userData);
-	switch (cmd)
-	{
-	case APP_CMD_SAVE_STATE:
-		LOGD("APP_CMD_SAVE_STATE");
-		/*
-		vulkanExample->app->savedState = malloc(sizeof(struct saved_state));
-		*((struct saved_state*)vulkanExample->app->savedState) = vulkanExample->state;
-		vulkanExample->app->savedStateSize = sizeof(struct saved_state);
-		*/
-		break;
-	case APP_CMD_INIT_WINDOW:
-		LOGD("APP_CMD_INIT_WINDOW");
-		if (vulkanExample->androidApp->window != NULL)
-		{
-			vulkanExample->initVulkan(false);
-			vulkanExample->initSwapchain();
-			vulkanExample->prepare();
-			assert(vulkanExample->prepared);
-		}
-		else
-		{
-			LOGE("No window assigned!");
-		}
-		break;
-	case APP_CMD_LOST_FOCUS:
-		LOGD("APP_CMD_LOST_FOCUS");
-		vulkanExample->focused = false;
-		break;
-	case APP_CMD_GAINED_FOCUS:
-		LOGD("APP_CMD_GAINED_FOCUS");
-		vulkanExample->focused = true;
-		break;
-	case APP_CMD_TERM_WINDOW:
-		// Window is hidden or closed, clean up resources
-		LOGD("APP_CMD_TERM_WINDOW");
-		vulkanExample->swapChain.cleanup();
-		break;
-	}
-}
-#elif defined(_DIRECT2DISPLAY)
 #elif defined(__linux__)
 // Set up a window using XCB and request event types
 xcb_window_t VulkanExampleBase::setupWindow()
@@ -1694,10 +1413,6 @@ void VulkanExampleBase::initSwapchain()
 {
 #if defined(_WIN32)
 	swapChain.initSurface(windowInstance, window);
-#elif defined(__ANDROID__)	
-	swapChain.initSurface(androidApp->window);
-#elif defined(_DIRECT2DISPLAY)
-	swapChain.initSurface(width, height);
 #elif defined(__linux__)
 	swapChain.initSurface(connection, window);
 #endif
