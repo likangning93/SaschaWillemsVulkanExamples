@@ -269,7 +269,7 @@ public:
 		for (auto& particle : particleBuffer)
 		{
 			particle.pos = glm::vec2(rDistribution(rGenerator), rDistribution(rGenerator));
-			particle.vel = glm::vec2(rDistribution(rGenerator) * 0.001f, rDistribution(rGenerator) * 0.001f);
+			particle.vel = glm::vec2(rDistribution(rGenerator) * 0.1f, rDistribution(rGenerator) * 0.1f);
 		}
 
 		VkDeviceSize storageBufferSize = particleBuffer.size() * sizeof(Particle);
