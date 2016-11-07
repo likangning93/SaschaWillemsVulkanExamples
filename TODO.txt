@@ -1,0 +1,19 @@
+- read and understand what's going on in computeparticles.cpp
+- rewrite the simulation as boids with velocity color
+- make a new cmake project
+- do the writeup
+	- we'll have them set up a buffer
+	- have them set up shaders that just color everything and move the particles according to random velocity
+	- 
+	
+	
+- we'll say that Vulkan can be used for:
+	- multiple physical devices
+	- multiple CPU threads
+	- many command queues
+	- but for now we'll focus on a single logical device, on a single physical device, running from a single CPU thread
+	
+	
+	- ohhhh descriptor LAYOUT is attached to pipeline, SET is just interface for shoving data into there. so can have multiple SETs
+	
+	- looks like a "command buffer" is basically a "job" that you can submit to a Vulkan Queue. So you only have to "dispatch" the job once, because that's not really launching it, it's recording it into a command that you have saved and can submit to the queue again and again

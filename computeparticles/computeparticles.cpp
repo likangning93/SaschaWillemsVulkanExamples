@@ -112,7 +112,7 @@ public:
 		textureLoader->loadTexture(getAssetPath() + "textures/particle_gradient_rgba.ktx", VK_FORMAT_R8G8B8A8_UNORM, &textures.gradient, false);
 	}
 
-	void buildCommandBuffers()
+	void buildCommandBuffers() // for rendering
 	{
 		// Destroy command buffers if already present
 		if (!checkCommandBuffers())
@@ -167,7 +167,7 @@ public:
 
 	}
 
-	void buildComputeCommandBuffer()
+	void buildComputeCommandBuffer() // records a compute command that can be submitted to queues repeatedly
 	{
 		VkCommandBufferBeginInfo cmdBufInfo = vkTools::initializers::commandBufferBeginInfo();
 
@@ -227,6 +227,7 @@ public:
 	// Setup and fill the compute shader storage buffers containing the particles
 	void prepareStorageBuffers()
 	{
+		// Set up RNG
 		std::mt19937 rGenerator;
 		std::uniform_real_distribution<float> rDistribution(-1.0f, 1.0f);
 
@@ -246,8 +247,11 @@ public:
 
 		vk::Buffer stagingBuffer;
 
+		// Sascha Willems abstracted buffer creation nastiness away for you!
+		// But it still needs to happen here in prepareStorageBuffers
+		// Dependent on queue, wich depends on logical device, which depends on physical device
 		vulkanDevice->createBuffer(
-			VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+			VK_BUFFER_USAGE_TRANSFER_SRC_BIT, // make a transfer buffer
 			VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
 			&stagingBuffer,
 			storageBufferSize,
@@ -260,24 +264,27 @@ public:
 			&compute.storageBuffer,
 			storageBufferSize);
 
-		// Copy to staging buffer
+		// Copy to staging buffer, then to storage buffer
 		VkCommandBuffer copyCmd = VulkanExampleBase::createCommandBuffer(VK_COMMAND_BUFFER_LEVEL_PRIMARY, true);
 		VkBufferCopy copyRegion = {};
 		copyRegion.size = storageBufferSize;
 		vkCmdCopyBuffer(copyCmd, stagingBuffer.buffer, compute.storageBuffer.buffer, 1, &copyRegion);
+		// Run all commands in the queue and wait for the queue to become idle before returning.
+		// See implementation. Have multiple transfers? Can run them simultaneously by using
+		// fences instead of waiting for each to finish before starting the next one.
 		VulkanExampleBase::flushCommandBuffer(copyCmd, queue, true);
 
 		stagingBuffer.destroy();
 
-		// Binding description
+		// Binding description - How many bits go to each shader "thread?" What's the stride?
 		vertices.bindingDescriptions.resize(1);
 		vertices.bindingDescriptions[0] =
 			vkTools::initializers::vertexInputBindingDescription(
 				VERTEX_BUFFER_BIND_ID,
 				sizeof(Particle),
-				VK_VERTEX_INPUT_RATE_VERTEX);
+				VK_VERTEX_INPUT_RATE_VERTEX); // change for instancing
 
-		// Attribute descriptions
+		// Attribute descriptions - Which bits in the per-shader thread "payload" go where in the shader?
 		// Describes memory layout and shader positions
 		vertices.attributeDescriptions.resize(2);
 		// Location 0 : Position
@@ -285,15 +292,15 @@ public:
 			vkTools::initializers::vertexInputAttributeDescription(
 				VERTEX_BUFFER_BIND_ID,
 				0,
-				VK_FORMAT_R32G32_SFLOAT,
-				offsetof(Particle, pos));
+				VK_FORMAT_R32G32_SFLOAT, // what kind of data? vec2
+				offsetof(Particle, pos)); // offset into each Particle struct
 		// Location 1 : Gradient position
 		vertices.attributeDescriptions[1] =
 			vkTools::initializers::vertexInputAttributeDescription(
 				VERTEX_BUFFER_BIND_ID,
 				1,
-				VK_FORMAT_R32G32B32A32_SFLOAT,
-				offsetof(Particle, gradientPos));
+				VK_FORMAT_R32G32B32A32_SFLOAT, // what kind of data? vec4.
+				offsetof(Particle, gradientPos)); // offset into each Particle struct
 
 		// Assign to vertex buffer
 		vertices.inputState = vkTools::initializers::pipelineVertexInputStateCreateInfo();
@@ -303,17 +310,18 @@ public:
 		vertices.inputState.pVertexAttributeDescriptions = vertices.attributeDescriptions.data();
 	}
 
+	// Descriptor Pools - from these, can allocate descriptor sets, which link between UBOs stored in buffers and the pipeline.
 	void setupDescriptorPool()
 	{
 		std::vector<VkDescriptorPoolSize> poolSizes =
 		{
-			vkTools::initializers::descriptorPoolSize(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1),
-			vkTools::initializers::descriptorPoolSize(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1),
-			vkTools::initializers::descriptorPoolSize(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 2)
+			vkTools::initializers::descriptorPoolSize(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1), // needed for compute buffer uniforms
+			vkTools::initializers::descriptorPoolSize(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1), // needed for compute buffer to access storage buffer?
+			vkTools::initializers::descriptorPoolSize(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 2) // graphics pipe has 2 textures
 		};
 
 		VkDescriptorPoolCreateInfo descriptorPoolInfo =
-			vkTools::initializers::descriptorPoolCreateInfo(
+			vkTools::initializers::descriptorPoolCreateInfo( // create 3 descriptor pools
 				static_cast<uint32_t>(poolSizes.size()),
 				poolSizes.data(),
 				2);
@@ -321,7 +329,7 @@ public:
 		VK_CHECK_RESULT(vkCreateDescriptorPool(device, &descriptorPoolInfo, nullptr, &descriptorPool));
 	}
 
-	void setupDescriptorSetLayout()
+	void setupDescriptorSetLayout() // for graphics pipeline. textures.
 	{
 		std::vector<VkDescriptorSetLayoutBinding> setLayoutBindings;
 		// Binding 0 : Particle color map
@@ -347,10 +355,11 @@ public:
 				&graphics.descriptorSetLayout,
 				1);
 
+		// layout bound to pipeline here. descriptor set can be set up later to match.
 		VK_CHECK_RESULT(vkCreatePipelineLayout(device, &pipelineLayoutCreateInfo, nullptr, &graphics.pipelineLayout));
 	}
 
-	void setupDescriptorSet()
+	void setupDescriptorSet() // must match layout set when pipeline was created. bound in buildCommandBuffers
 	{
 		VkDescriptorSetAllocateInfo allocInfo =
 			vkTools::initializers::descriptorSetAllocateInfo(
@@ -439,7 +448,7 @@ public:
 				renderPass,
 				0);
 
-		pipelineCreateInfo.pVertexInputState = &vertices.inputState;
+		pipelineCreateInfo.pVertexInputState = &vertices.inputState; // indicate to pipeline how to use vertex buffer
 		pipelineCreateInfo.pInputAssemblyState = &inputAssemblyState;
 		pipelineCreateInfo.pRasterizationState = &rasterizationState;
 		pipelineCreateInfo.pColorBlendState = &colorBlendState;
@@ -507,11 +516,13 @@ public:
 
 		VK_CHECK_RESULT(vkCreatePipelineLayout(device, &pPipelineLayoutCreateInfo, nullptr,	&compute.pipelineLayout));
 
+		// set up descriptor sets for interfacing with descriptor layout on compute pipeline
+
 		VkDescriptorSetAllocateInfo allocInfo =
 			vkTools::initializers::descriptorSetAllocateInfo(
 				descriptorPool,
 				&compute.descriptorSetLayout,
-				1);
+				1); // just one descriptor set needed for per-thread data input and uniform input
 
 		VK_CHECK_RESULT(vkAllocateDescriptorSets(device, &allocInfo, &compute.descriptorSet));
 
@@ -630,7 +641,7 @@ public:
 		setupDescriptorPool();
 		setupDescriptorSet();
 		prepareCompute();
-		buildCommandBuffers();
+		buildCommandBuffers(); // graphics command buffers
 		prepared = true;
 	}
 

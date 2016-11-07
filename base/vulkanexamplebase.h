@@ -13,11 +13,6 @@
 #include <windows.h>
 #include <fcntl.h>
 #include <io.h>
-#elif defined(__ANDROID__)
-#include <android/native_activity.h>
-#include <android/asset_manager.h>
-#include <android_native_app_glue.h>
-#include "vulkanandroid.h"
 #elif defined(__linux__)
 #include <xcb/xcb.h>
 #endif
@@ -188,10 +183,6 @@ public:
 #if defined(_WIN32)
 	HWND window;
 	HINSTANCE windowInstance;
-#elif defined(__ANDROID__)
-	android_app* androidApp;
-	// true if application has focused, false if moved to background
-	bool focused = false;
 #elif defined(__linux__)
 	struct {
 		bool left = false;
@@ -218,9 +209,6 @@ public:
 	void setupConsole(std::string title);
 	HWND setupWindow(HINSTANCE hinstance, WNDPROC wndproc);
 	void handleMessages(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
-#elif defined(__ANDROID__)
-	static int32_t handleAppInput(struct android_app* app, AInputEvent* event);
-	static void handleAppCommand(android_app* app, int32_t cmd);
 #elif defined(__linux__)
 	xcb_window_t setupWindow();
 	void initxcbConnection();
@@ -376,39 +364,6 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLin
 	delete(vulkanExample);																			\
 	return 0;																						\
 }																									
-#elif defined(__ANDROID__)
-// Android entry point
-// A note on app_dummy(): This is required as the compiler may otherwise remove the main entry point of the application
-#define VULKAN_EXAMPLE_MAIN()																		\
-VulkanExample *vulkanExample;																		\
-void android_main(android_app* state)																\
-{																									\
-	app_dummy();																					\
-	vulkanExample = new VulkanExample();															\
-	state->userData = vulkanExample;																\
-	state->onAppCmd = VulkanExample::handleAppCommand;												\
-	state->onInputEvent = VulkanExample::handleAppInput;											\
-	vulkanExample->androidApp = state;																\
-	vulkanExample->renderLoop();																	\
-	delete(vulkanExample);																			\
-}
-#elif defined(_DIRECT2DISPLAY)
-// Linux entry point with direct to display wsi
-// todo: extract command line arguments
-#define VULKAN_EXAMPLE_MAIN()																		\
-VulkanExample *vulkanExample;																		\
-static void handleEvent()                                											\
-{																									\
-}																									\
-int main(const int argc, const char *argv[])													    \
-{																									\
-	vulkanExample = new VulkanExample();															\
-	vulkanExample->initSwapchain();																	\
-	vulkanExample->prepare();																		\
-	vulkanExample->renderLoop();																	\
-	delete(vulkanExample);																			\
-	return 0;																						\
-}
 #elif defined(__linux__)
 // Linux entry point
 // todo: extract command line arguments
