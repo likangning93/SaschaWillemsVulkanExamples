@@ -176,33 +176,11 @@ public:
 	// TODO: call this repeatedly to remake the command
 	void buildComputeCommandBuffer(vk::Buffer &computeStorageBuffer, VkDescriptorSet &computeDescriptorSet) // records a compute command that can be submitted to queues repeatedly
 	{
-		// free command buffer if already exists
-		/*
-		if (compute.commandBuffer != VK_NULL_HANDLE)
-		{
-
-#ifdef PRINTDEBUG
-			std::cout << "attempting to free command buffers...";
-#endif
-			vkFreeCommandBuffers(device, compute.commandPool, static_cast<uint32_t>(1), &compute.commandBuffer);
-#ifdef PRINTDEBUG
-			std::cout << " success!" << std::endl;
-#endif
-		}
-
-		// create command buffer
-		VkCommandBufferAllocateInfo cmdBufAllocateInfo =
-			vkTools::initializers::commandBufferAllocateInfo(
-			compute.commandPool,
-			VK_COMMAND_BUFFER_LEVEL_PRIMARY,
-			1);
-
-		VK_CHECK_RESULT(vkAllocateCommandBuffers(device, &cmdBufAllocateInfo, &compute.commandBuffer)); */
-
 		VkCommandBufferBeginInfo cmdBufInfo = vkTools::initializers::commandBufferBeginInfo();
 
 		//std::cout << "attempting to re-begin command buffer...";
 		vkWaitForFences(device, 1, &compute.fence, VK_TRUE, UINT64_MAX);
+		//VK_CHECK_RESULT(vkResetCommandBuffer(compute.commandBuffer, 0)); // reset
 		VK_CHECK_RESULT(vkBeginCommandBuffer(compute.commandBuffer, &cmdBufInfo)); // start recording
 		//std::cout << "success!" << std::endl;
 

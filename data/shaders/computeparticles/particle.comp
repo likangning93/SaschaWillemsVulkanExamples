@@ -66,9 +66,9 @@ void main()
     // collide with boundary
     if ((vPos.x < -1.0) || (vPos.x > 1.0) || (vPos.y < -1.0) || (vPos.y > 1.0))
     	vVel = (-vVel * 0.1);
-    else
-    	particlesB[index].pos.xy = vPos;
+
+    particlesB[index].pos.xy = vPos;
 
     // Write back
-    particlesA[index].vel.xy = vVel;
+    particlesB[index].vel.xy = vVel;
 }

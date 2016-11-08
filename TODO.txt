@@ -25,6 +25,7 @@
 - how to edit compute:
 1) figure out what new descriptors you need in the shader (attributes and uniforms). make sure your shaders compile for testing!
 2) modify any structs in your code [line 77 ish]
+3) ... many more things...
 
 - Corentin: btw rebuild command buffers on the fly, with different descriptorSets
 - 
@@ -35,3 +36,4 @@ Chat with Corentin:
 - in Python since you can't talk directly to C++, you make a set of args in the right format and send it off
 - in Vulkan, you just have to define on the CPU side how the shader expects things -> descriptorLayout
 
+- btw Corentin says MoltenVK is NOT in good shape
