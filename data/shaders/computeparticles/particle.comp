@@ -47,23 +47,49 @@ void main()
 		vec2 vPos = particlesA[index].pos.xy;
     vec2 vVel = particlesA[index].vel.xy;
 
-		// compute acceleration
-		vec2 centerOfMass = vec2(0.0);
+		vec2 center = vec2(0.0, 0.0);
+		int neighborCount = 0;
+
+		vec2 separate = vec2(0.0, 0.0);
+
+		vec2 cohesion = vec2(0.0, 0.0);
 
 		for (int i = 0; i < ubo.particleCount; i++) {
 			if (i == index) continue;
-			centerOfMass += particlesA[i].pos.xy;
+			vec2 otherPos = particlesA[i].pos.xy;
+			vec2 otherVel = particlesA[i].vel.xy;
+			float dist = length(otherPos - vPos);
+
+			if (dist < ubo.rule1Distance) {
+				// rule 1: cohesion - boids fly towards the center of mass of neighbors
+				center += otherPos;
+				neighborCount++;
+			}
+
+			if (dist <  ubo.rule2Distance) {
+				// rule 2: separation: boids try to keep some distance away from other boids
+				separate -= otherPos - vPos;
+			}
+
+			if (dist <  ubo.rule3Distance) {
+				// rule 3: alignment: boids try to match velocities of neighboring boids
+				cohesion += otherVel;
+			}
 		}
 
-		centerOfMass /= float(ubo.particleCount);
-		vec2 acc = (centerOfMass - vPos) * ubo.rule1Scale;
+		if (neighborCount > 0) {
+			center /= float(neighborCount);
+			vVel += (center - vPos) * ubo.rule1Scale;
+		}
 
-		// kinematic update
-		vVel += acc * ubo.deltaT;
+		vVel += cohesion * ubo.rule3Scale;
+		vVel += separate * ubo.rule2Scale;
 
-		//vVel = normalize(vVel) * clamp(length(vVel), 0.0, 0.5);
+		// clamp velocity
+		float len = length(vVel);
+		if (len > 0.05) vVel = normalize(vVel) * 0.05;
 
-		vPos += 0.5 * acc * ubo.deltaT * ubo.deltaT + vVel * ubo.deltaT;
+		vPos += vVel * ubo.deltaT;
 
     // Wrap around boundary
 		if (vPos.x < -1.0) vPos.x = 1.0;

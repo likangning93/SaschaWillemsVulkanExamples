@@ -28,11 +28,11 @@
 #define PARTICLE_COUNT 4 * 1024
 #define PRINTDEBUG 0
 
-#define RULE1DISTANCE  0.01f
-#define RULE2DISTANCE 0.01f
-#define RULE3DISTANCE 0.01f
-#define RULE1SCALE 0.01f
-#define RULE2SCALE 0.01f
+#define RULE1DISTANCE 0.1f
+#define RULE2DISTANCE 0.05f
+#define RULE3DISTANCE 0.05f
+#define RULE1SCALE 0.02f
+#define RULE2SCALE 0.05f
 #define RULE3SCALE 0.01f
 
 class VulkanExample : public VulkanExampleBase
@@ -254,7 +254,8 @@ public:
 		for (auto& particle : particleBuffer)
 		{
 			particle.pos = glm::vec2(rDistribution(rGenerator), rDistribution(rGenerator));
-			particle.vel = 0.05f * glm::vec2(rDistribution(rGenerator), rDistribution(rGenerator));
+			//std::cout << particle.pos.x << " " << particle.pos.y << std::endl;
+			particle.vel = glm::vec2(0.0f, 0.0f);// 0.05f * glm::vec2(rDistribution(rGenerator), rDistribution(rGenerator));
 		}
 
 		VkDeviceSize storageBufferSize = particleBuffer.size() * sizeof(Particle);
@@ -675,6 +676,13 @@ public:
 	void updateUniformBuffers()
 	{
 		compute.ubo.deltaT = frameTimer * 2.5f;
+		compute.ubo.rule1Distance = RULE1DISTANCE;
+		compute.ubo.rule2Distance = RULE2DISTANCE;
+		compute.ubo.rule3Distance = RULE3DISTANCE;
+		compute.ubo.rule1Scale = RULE1SCALE;
+		compute.ubo.rule2Scale = RULE2SCALE;
+		compute.ubo.rule3Scale = RULE3SCALE;
+		compute.ubo.particleCount = PARTICLE_COUNT;
 		memcpy(compute.uniformBuffer.mapped, &compute.ubo, sizeof(compute.ubo));
 	}
 

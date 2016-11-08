@@ -1,8 +1,8 @@
 - read and understand what's going on in computeparticles.cpp [done... mostly?]
 - rewrite the simulation as boids with velocity color
 	- get velocity buffer flip-flop
-		- this will probably be two descriptor sets and two command... buffers?
-	- 
+		- this will probably be two descriptor sets and two command... buffers? [done]
+	- ok not boids yet, but it does seem like a psystem... [done!]
 - make a new cmake project
 - do the writeup
 	- we'll have them set up a buffer
@@ -37,3 +37,16 @@ Chat with Corentin:
 - in Vulkan, you just have to define on the CPU side how the shader expects things -> descriptorLayout
 
 - btw Corentin says MoltenVK is NOT in good shape
+
+
+quick phonecall with Patrick:
+- walkthrough with OBS -> people should be able to follow this
+- set a due date for the 15th
+- make all extras 100% optional but cool
+- final proj pitches will come first, then break and vulkan
+
+- patrick opt extra: culling in compute shader
+	- similar to opengl indirect render
+	- this is compute shader draw culling
+		- index buffer used for drawing
+		- compute shader writes to index buffer which particles should get drawn
