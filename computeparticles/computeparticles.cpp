@@ -1,5 +1,5 @@
 /*
-* Vulkan Example - Attraction based compute shader particle system
+* Vulkan Example - Boids based compute shader particle system
 *
 * Updated compute shader by Lukas Bergdoll (https://github.com/Voultapher)
 *
@@ -116,18 +116,9 @@ public:
 		vkDestroyPipeline(device, compute.pipeline, nullptr);
 		vkDestroyFence(device, compute.fence, nullptr);
 		vkDestroyCommandPool(device, compute.commandPool, nullptr);
-
-		//textureLoader->destroyTexture(textures.particle);
-		//textureLoader->destroyTexture(textures.gradient);
 	}
 
-	void loadTextures()
-	{
-		textureLoader->loadTexture(getAssetPath() + "textures/particle01_rgba.ktx", VK_FORMAT_R8G8B8A8_UNORM, &textures.particle, false);
-		textureLoader->loadTexture(getAssetPath() + "textures/particle_gradient_rgba.ktx", VK_FORMAT_R8G8B8A8_UNORM, &textures.gradient, false);
-	}
-
-	void buildCommandBuffers() // for rendering. TODO: call this repeatedly, to rewrite with flip/flop
+	void buildCommandBuffers()
 	{
 		// Destroy command buffers if already present
 		if (!checkCommandBuffers())
@@ -168,7 +159,6 @@ public:
 			vkCmdSetScissor(drawCmdBuffers[i], 0, 1, &scissor);
 
 			vkCmdBindPipeline(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, graphics.pipeline);
-			//vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, graphics.pipelineLayout, 0, 1, &graphics.descriptorSet, 0, NULL);
 
 			VkDeviceSize offsets[1] = { 0 };
 			vkCmdBindVertexBuffers(drawCmdBuffers[i], VERTEX_BUFFER_BIND_ID, 1, &compute.storageBufferA.buffer, offsets);
@@ -185,13 +175,8 @@ public:
 	{
 		VkCommandBufferBeginInfo cmdBufInfo = vkTools::initializers::commandBufferBeginInfo();
 
-		//std::cout << "attempting to re-begin command buffer...";
 		vkWaitForFences(device, 1, &compute.fence, VK_TRUE, UINT64_MAX);
-		//VK_CHECK_RESULT(vkResetCommandBuffer(compute.commandBuffer, 0)); // reset
 		VK_CHECK_RESULT(vkBeginCommandBuffer(compute.commandBuffer, &cmdBufInfo)); // start recording
-		//std::cout << "success!" << std::endl;
-
-		// Compute particle movement -> TODO: make students aware of barriers! this is the dripping cloth problem!
 
 		// Add memory barrier to ensure that the (graphics) vertex shader has fetched attributes before compute starts to write to the buffer
 		VkBufferMemoryBarrier bufferBarrier = vkTools::initializers::bufferMemoryBarrier();
@@ -225,6 +210,7 @@ public:
 		bufferBarrier.dstAccessMask = VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT;						// Vertex shader invocations want to read from the buffer
 		bufferBarrier.buffer = compute.storageBufferA.buffer;
 		bufferBarrier.size = compute.storageBufferA.descriptor.range;
+
 		// Compute and graphics queue may have different queue families (see VulkanDevice::createLogicalDevice)
 		// For the barrier to work across different queues, we need to set their family indices
 		bufferBarrier.srcQueueFamilyIndex = vulkanDevice->queueFamilyIndices.compute;			// Required as compute and graphics queue may have different families
@@ -254,8 +240,6 @@ public:
 		for (auto& particle : particleBuffer)
 		{
 			particle.pos = glm::vec2(rDistribution(rGenerator), rDistribution(rGenerator));
-			//std::cout << particle.pos.x << " " << particle.pos.y << std::endl;
-			particle.vel = glm::vec2(0.0f, 0.0f);// 0.05f * glm::vec2(rDistribution(rGenerator), rDistribution(rGenerator));
 		}
 
 		VkDeviceSize storageBufferSize = particleBuffer.size() * sizeof(Particle);
@@ -347,7 +331,6 @@ public:
 		{
 			vkTools::initializers::descriptorPoolSize(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 5), // can allocate uniform descriptors from here
 			vkTools::initializers::descriptorPoolSize(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 5) // can allocate buffer descriptors from here
-			//vkTools::initializers::descriptorPoolSize(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 2) // graphics pipe has 2 textures
 		};
 
 		VkDescriptorPoolCreateInfo descriptorPoolInfo =
@@ -362,17 +345,6 @@ public:
 	void setupDescriptorSetLayout() // for graphics pipeline. textures.
 	{
 		std::vector<VkDescriptorSetLayoutBinding> setLayoutBindings;
-		/*
-		// Binding 0 : Particle color map
-		setLayoutBindings.push_back(vkTools::initializers::descriptorSetLayoutBinding(
-			VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-			VK_SHADER_STAGE_FRAGMENT_BIT,
-			0));
-		// Binding 1 : Particle gradient ramp
-		setLayoutBindings.push_back(vkTools::initializers::descriptorSetLayoutBinding(
-			VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-			VK_SHADER_STAGE_FRAGMENT_BIT,
-			1)); */
 
 		VkDescriptorSetLayoutCreateInfo descriptorLayout =
 			vkTools::initializers::descriptorSetLayoutCreateInfo(
@@ -387,48 +359,8 @@ public:
 				1);
 
 		// layout bound to pipeline here. descriptor set can be set up later to match.
-#ifdef PRINTDEBUG
-		std::cout << "setting up descriptor set layout... ";
-#endif
 		VK_CHECK_RESULT(vkCreatePipelineLayout(device, &pipelineLayoutCreateInfo, nullptr, &graphics.pipelineLayout));
-#ifdef PRINTDEBUG
-		std::cout << "success!" << std::endl;
-#endif
 	}
-
-	
-	void setupDescriptorSet() // must match layout set when pipeline was created. bound in buildCommandBuffers
-	{
-		VkDescriptorSetAllocateInfo allocInfo =
-			vkTools::initializers::descriptorSetAllocateInfo(
-				descriptorPool,
-				&graphics.descriptorSetLayout,
-				1);
-
-		VK_CHECK_RESULT(vkAllocateDescriptorSets(device, &allocInfo, &graphics.descriptorSet));
-
-		std::vector<VkWriteDescriptorSet> writeDescriptorSets;
-		/*
-		// Binding 0 : Particle color map
-		writeDescriptorSets.push_back(vkTools::initializers::writeDescriptorSet(
-			graphics.descriptorSet,
-			VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-			0,
-			&textures.particle.descriptor));
-		// Binding 1 : Particle gradient ramp
-		writeDescriptorSets.push_back(vkTools::initializers::writeDescriptorSet(
-			graphics.descriptorSet,
-			VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-			1,
-			&textures.gradient.descriptor)); */
-#ifdef PRINTDEBUG
-		std::cout << "setting up descriptor set... ";
-#endif
-		vkUpdateDescriptorSets(device, static_cast<uint32_t>(writeDescriptorSets.size()), writeDescriptorSets.data(), 0, NULL);
-#ifdef PRINTDEBUG
-		std::cout << "success!" << std::endl;
-#endif
-	} 
 
 	void preparePipelines()
 	{
@@ -556,9 +488,7 @@ public:
 				setLayoutBindings.data(),
 				static_cast<uint32_t>(setLayoutBindings.size()));
 
-		//std::cout << "creating descriptor set layout for compute...";
 		VK_CHECK_RESULT(vkCreateDescriptorSetLayout(device,	&descriptorLayout, nullptr,	&compute.descriptorSetLayout));
-		//std::cout << " success!" << std::endl;
 
 		VkPipelineLayoutCreateInfo pPipelineLayoutCreateInfo =
 			vkTools::initializers::pipelineLayoutCreateInfo(
@@ -652,9 +582,6 @@ public:
 		// Fence for compute CB sync
 		VkFenceCreateInfo fenceCreateInfo = vkTools::initializers::fenceCreateInfo(VK_FENCE_CREATE_SIGNALED_BIT);
 		VK_CHECK_RESULT(vkCreateFence(device, &fenceCreateInfo, nullptr, &compute.fence));
-
-		// Build a single command buffer containing the compute dispatch commands
-		//buildComputeCommandBuffer();
 	}
 
 	// Prepare and initialize uniform buffer containing shader uniforms for compute
@@ -684,18 +611,15 @@ public:
 		compute.ubo.rule3Scale = RULE3SCALE;
 		compute.ubo.particleCount = PARTICLE_COUNT;
 		memcpy(compute.uniformBuffer.mapped, &compute.ubo, sizeof(compute.ubo));
+
+		// mousePos can be used to access mouse position on screen
 	}
 
 	void draw()
 	{
-		//std::cout << "rewriting command buffers for shading...";
-		// rewrite command buffers for graphics and compute
 		buildCommandBuffers();
-		//std::cout << " success!" << std::endl;
 
-		//std::cout << "rewriting command buffers for compute...";
 		buildComputeCommandBuffer();
-		//std::cout << " success!" << std::endl;
 
 		// Submit graphics commands
 		VulkanExampleBase::prepareFrame();
@@ -724,15 +648,12 @@ public:
 	void prepare()
 	{
 		VulkanExampleBase::prepare();
-		//loadTextures(); // TODO: remove?
 		prepareStorageBuffers();
-		prepareUniformBuffers(); // for compute
+		prepareUniformBuffers(); // uniform buffers for compute
 		setupDescriptorSetLayout(); // for textures. ok to remove?
 		preparePipelines();
 		setupDescriptorPool();
-		setupDescriptorSet(); // for textures atm, mostly. ok to remove?
 		prepareCompute();
-		//buildCommandBuffers(); // graphics command buffers
 		prepared = true;
 	}
 
