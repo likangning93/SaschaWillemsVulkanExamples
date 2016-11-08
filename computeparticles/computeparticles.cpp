@@ -25,8 +25,15 @@
 
 #define VERTEX_BUFFER_BIND_ID 0
 #define ENABLE_VALIDATION true
-#define PARTICLE_COUNT 256 * 1024
+#define PARTICLE_COUNT 4 * 1024
 #define PRINTDEBUG 0
+
+#define RULE1DISTANCE  0.01f
+#define RULE2DISTANCE 0.01f
+#define RULE3DISTANCE 0.01f
+#define RULE1SCALE 0.01f
+#define RULE2SCALE 0.01f
+#define RULE3SCALE 0.01f
 
 class VulkanExample : public VulkanExampleBase
 {
@@ -70,8 +77,12 @@ public:
 		VkPipeline pipeline;						// Compute pipeline for updating particle positions
 		struct computeUBO {							// Compute shader uniform block object
 			float deltaT;							//		Frame delta time
-			float destX;							//		x position of the attractor
-			float destY;							//		y position of the attractor
+			float rule1Distance = RULE1DISTANCE;
+			float rule2Distance = RULE2DISTANCE;
+			float rule3Distance = RULE3DISTANCE;
+			float rule1Scale = RULE1SCALE;
+			float rule2Scale = RULE2SCALE;
+			float rule3Scale = RULE3SCALE;
 			int32_t particleCount = PARTICLE_COUNT;
 		} ubo;
 	} compute;
@@ -116,17 +127,14 @@ public:
 		textureLoader->loadTexture(getAssetPath() + "textures/particle_gradient_rgba.ktx", VK_FORMAT_R8G8B8A8_UNORM, &textures.gradient, false);
 	}
 
-	void buildCommandBuffers(VkBuffer &vertexBuffer) // for rendering. TODO: call this repeatedly, to rewrite with flip/flop
+	void buildCommandBuffers() // for rendering. TODO: call this repeatedly, to rewrite with flip/flop
 	{
 		// Destroy command buffers if already present
 		if (!checkCommandBuffers())
 		{
-			std::cout << "destroying and recreating command buffer...";
 			destroyCommandBuffers();
 			createCommandBuffers();
-			std::cout << "done!" << std::endl;
 		}
-
 		VkCommandBufferBeginInfo cmdBufInfo = vkTools::initializers::commandBufferBeginInfo();
 
 		VkClearValue clearValues[2];
@@ -163,7 +171,7 @@ public:
 			//vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, graphics.pipelineLayout, 0, 1, &graphics.descriptorSet, 0, NULL);
 
 			VkDeviceSize offsets[1] = { 0 };
-			vkCmdBindVertexBuffers(drawCmdBuffers[i], VERTEX_BUFFER_BIND_ID, 1, &vertexBuffer, offsets);
+			vkCmdBindVertexBuffers(drawCmdBuffers[i], VERTEX_BUFFER_BIND_ID, 1, &compute.storageBufferA.buffer, offsets);
 			vkCmdDraw(drawCmdBuffers[i], PARTICLE_COUNT, 1, 0, 0);
 
 			vkCmdEndRenderPass(drawCmdBuffers[i]);
@@ -173,8 +181,7 @@ public:
 
 	}
 
-	// TODO: call this repeatedly to remake the command
-	void buildComputeCommandBuffer(vk::Buffer &computeStorageBuffer, VkDescriptorSet &computeDescriptorSet) // records a compute command that can be submitted to queues repeatedly
+	void buildComputeCommandBuffer() // records a compute command that can be submitted to queues repeatedly
 	{
 		VkCommandBufferBeginInfo cmdBufInfo = vkTools::initializers::commandBufferBeginInfo();
 
@@ -188,8 +195,8 @@ public:
 
 		// Add memory barrier to ensure that the (graphics) vertex shader has fetched attributes before compute starts to write to the buffer
 		VkBufferMemoryBarrier bufferBarrier = vkTools::initializers::bufferMemoryBarrier();
-		bufferBarrier.buffer = computeStorageBuffer.buffer;
-		bufferBarrier.size = computeStorageBuffer.descriptor.range;
+		bufferBarrier.buffer = compute.storageBufferA.buffer;
+		bufferBarrier.size = compute.storageBufferA.descriptor.range;
 		bufferBarrier.srcAccessMask = VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT;						// Vertex shader invocations have finished reading from the buffer
 		bufferBarrier.dstAccessMask = VK_ACCESS_SHADER_WRITE_BIT;								// Compute shader wants to write to the buffer
 		// Compute and graphics queue may have different queue families (see VulkanDevice::createLogicalDevice)
@@ -207,7 +214,7 @@ public:
 			0, nullptr);
 
 		vkCmdBindPipeline(compute.commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, compute.pipeline);
-		vkCmdBindDescriptorSets(compute.commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, compute.pipelineLayout, 0, 1, &computeDescriptorSet, 0, 0);
+		vkCmdBindDescriptorSets(compute.commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, compute.pipelineLayout, 0, 1, compute.descriptorSet, 0, 0);
 
 		// Dispatch the compute job
 		vkCmdDispatch(compute.commandBuffer, PARTICLE_COUNT / 16, 1, 1);
@@ -216,8 +223,8 @@ public:
 		// Without this the (rendering) vertex shader may display incomplete results (partial data from last frame) 
 		bufferBarrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;								// Compute shader has finished writes to the buffer
 		bufferBarrier.dstAccessMask = VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT;						// Vertex shader invocations want to read from the buffer
-		bufferBarrier.buffer = computeStorageBuffer.buffer;
-		bufferBarrier.size = computeStorageBuffer.descriptor.range;
+		bufferBarrier.buffer = compute.storageBufferA.buffer;
+		bufferBarrier.size = compute.storageBufferA.descriptor.range;
 		// Compute and graphics queue may have different queue families (see VulkanDevice::createLogicalDevice)
 		// For the barrier to work across different queues, we need to set their family indices
 		bufferBarrier.srcQueueFamilyIndex = vulkanDevice->queueFamilyIndices.compute;			// Required as compute and graphics queue may have different families
@@ -247,7 +254,7 @@ public:
 		for (auto& particle : particleBuffer)
 		{
 			particle.pos = glm::vec2(rDistribution(rGenerator), rDistribution(rGenerator));
-			particle.vel = glm::vec2(rDistribution(rGenerator) * 0.1f, rDistribution(rGenerator) * 0.1f);
+			particle.vel = 0.05f * glm::vec2(rDistribution(rGenerator), rDistribution(rGenerator));
 		}
 
 		VkDeviceSize storageBufferSize = particleBuffer.size() * sizeof(Particle);
@@ -668,19 +675,6 @@ public:
 	void updateUniformBuffers()
 	{
 		compute.ubo.deltaT = frameTimer * 2.5f;
-		if (animate) 
-		{
-			compute.ubo.destX = sin(glm::radians(timer * 360.0f)) * 0.75f;
-			compute.ubo.destY = 0.0f;
-		}
-		else
-		{
-			float normalizedMx = (mousePos.x - static_cast<float>(width / 2)) / static_cast<float>(width / 2);
-			float normalizedMy = (mousePos.y - static_cast<float>(height / 2)) / static_cast<float>(height / 2);
-			compute.ubo.destX = normalizedMx;
-			compute.ubo.destY = normalizedMy;
-		}
-
 		memcpy(compute.uniformBuffer.mapped, &compute.ubo, sizeof(compute.ubo));
 	}
 
@@ -688,11 +682,11 @@ public:
 	{
 		//std::cout << "rewriting command buffers for shading...";
 		// rewrite command buffers for graphics and compute
-		buildCommandBuffers(compute.storageBufferA.buffer);
+		buildCommandBuffers();
 		//std::cout << " success!" << std::endl;
 
 		//std::cout << "rewriting command buffers for compute...";
-		buildComputeCommandBuffer(compute.storageBufferA, compute.descriptorSet[0]);
+		buildComputeCommandBuffer();
 		//std::cout << " success!" << std::endl;
 
 		// Submit graphics commands

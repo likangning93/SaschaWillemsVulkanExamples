@@ -25,29 +25,16 @@ layout (local_size_x = 16, local_size_y = 16) in;
 
 layout (binding = 2) uniform UBO
 {
-	float deltaT; // TODO: change these next!
-	float destX;
-	float destY;
+	float deltaT;
+	float rule1Distance;
+	float rule2Distance;
+	float rule3Distance;
+	float rule1Scale;
+	float rule2Scale;
+	float rule3Scale;
 	int particleCount;
 } ubo;
-/*
-vec2 attraction(vec2 pos, vec2 attractPos)
-{
-    vec2 delta = attractPos - pos;
-	const float damp = 0.5;
-    float dDampedDot = dot(delta, delta) + damp;
-    float invDist = 1.0f / sqrt(dDampedDot);
-    float invDistCubed = invDist*invDist*invDist;
-    return delta * invDistCubed * 0.0035;
-}
 
-vec2 repulsion(vec2 pos, vec2 attractPos)
-{
-	vec2 delta = attractPos - pos;
-	float targetDistance = sqrt(dot(delta, delta));
-	return delta * (1.0 / (targetDistance * targetDistance * targetDistance)) * -0.000035;
-}
-*/
 void main()
 {
     // Current SSBO index
@@ -57,15 +44,32 @@ void main()
 		return;
 
     // Read position and velocity
+		vec2 vPos = particlesA[index].pos.xy;
     vec2 vVel = particlesA[index].vel.xy;
-    vec2 vPos = particlesA[index].pos.xy;
 
-    // Move by velocity
-    vPos += vVel * ubo.deltaT;
+		// compute acceleration
+		vec2 centerOfMass = vec2(0.0);
 
-    // collide with boundary
-    if ((vPos.x < -1.0) || (vPos.x > 1.0) || (vPos.y < -1.0) || (vPos.y > 1.0))
-    	vVel = (-vVel * 0.1);
+		for (int i = 0; i < ubo.particleCount; i++) {
+			if (i == index) continue;
+			centerOfMass += particlesA[i].pos.xy;
+		}
+
+		centerOfMass /= float(ubo.particleCount);
+		vec2 acc = (centerOfMass - vPos) * ubo.rule1Scale;
+
+		// kinematic update
+		vVel += acc * ubo.deltaT;
+
+		//vVel = normalize(vVel) * clamp(length(vVel), 0.0, 0.5);
+
+		vPos += 0.5 * acc * ubo.deltaT * ubo.deltaT + vVel * ubo.deltaT;
+
+    // Wrap around boundary
+		if (vPos.x < -1.0) vPos.x = 1.0;
+		if (vPos.x > 1.0) vPos.x = -1.0;
+		if (vPos.y < -1.0) vPos.y = 1.0;
+		if (vPos.y > 1.0) vPos.y = -1.0;
 
     particlesB[index].pos.xy = vPos;
 
